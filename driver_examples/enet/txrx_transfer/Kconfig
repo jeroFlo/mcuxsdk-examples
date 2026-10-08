@@ -39,7 +39,7 @@ config APP_USER_DEFINED_MAC_ADDRESS
 
 config APP_MAC_ADDRESS
     string "MAC Address Byte Array"
-    default "{0x54, 0x27, 0x8d, 0x00, 0x00, 0x00}"
+    default "{0x48, 0xea, 0x62, 0x99, 0x0b, 0xe3}"
     depends on APP_USER_DEFINED_MAC_ADDRESS
     help
         No prefix in generated macro
