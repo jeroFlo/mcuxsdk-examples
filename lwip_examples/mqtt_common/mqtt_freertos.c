@@ -26,15 +26,7 @@
  * Definitions
  ******************************************************************************/
 
-/*! @brief MQTT server host name or IP address. */
-#ifndef EXAMPLE_MQTT_SERVER_HOST
-#define EXAMPLE_MQTT_SERVER_HOST "test.mosquitto.org"
-#endif
 
-/*! @brief MQTT server port number. */
-#ifndef EXAMPLE_MQTT_SERVER_PORT
-#define EXAMPLE_MQTT_SERVER_PORT 1883
-#endif
 
 /*! @brief Stack size of the temporary lwIP initialization thread. */
 #define INIT_THREAD_STACKSIZE 1024
@@ -85,6 +77,14 @@ static ip_addr_t mqtt_addr;
 
 /*! @brief Indicates connection to MQTT broker. */
 static volatile bool connected = false;
+static char incoming_topic[128];
+static char incoming_message[16];
+
+__attribute__((weak)) void mqtt_freertos_message_received(const char *topic, const char *message)
+{
+    LWIP_UNUSED_ARG(topic);
+    LWIP_UNUSED_ARG(message);
+}
 
 /*******************************************************************************
  * Code
@@ -114,7 +114,11 @@ static void mqtt_incoming_publish_cb(void *arg, const char *topic, u32_t tot_len
 {
     LWIP_UNUSED_ARG(arg);
 
-    PRINTF("Received %u bytes from the topic \"%s\": \"", tot_len, topic);
+    strncpy(incoming_topic, topic, sizeof(incoming_topic) - 1U);
+    incoming_topic[sizeof(incoming_topic) - 1U] = '\0';
+    incoming_message[0] = '\0';
+    //PRINTF("Received %u bytes from the topic \"%s\": \"", tot_len, topic);
+    PRINTF("Received ");
 }
 
 /*!
@@ -122,25 +126,33 @@ static void mqtt_incoming_publish_cb(void *arg, const char *topic, u32_t tot_len
  */
 static void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t flags)
 {
+    size_t message_length = strlen(incoming_message);
     int i;
 
     LWIP_UNUSED_ARG(arg);
 
     for (i = 0; i < len; i++)
     {
-        if (isprint(data[i]))
+        if (message_length + (size_t)i < sizeof(incoming_message) - 1U)
         {
-            PRINTF("%c", (char)data[i]);
+            incoming_message[message_length + (size_t)i] = (char)data[i];
+            incoming_message[message_length + (size_t)i + 1U] = '\0';
         }
-        else
-        {
-            PRINTF("\\x%02x", data[i]);
-        }
+
+        // if (isprint(data[i]))
+        // {
+        //     PRINTF("%c", (char)data[i]);
+        // }
+        // else
+        // {
+        //     PRINTF("\\x%02x", data[i]);
+        // }
     }
 
     if (flags & MQTT_DATA_FLAG_LAST)
     {
-        PRINTF("\"\r\n");
+        PRINTF("\r\n");
+        mqtt_freertos_message_received(incoming_topic, incoming_message);
     }
 }
 
@@ -149,8 +161,8 @@ static void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t f
  */
 static void mqtt_subscribe_topics(mqtt_client_t *client)
 {
-    static const char *topics[] = {"lwip_topic/#", "lwip_other/#"};
-    int qos[]                   = {0, 1};
+    static const char *topics[] = {EXAMPLE_MQTT_SUBSCRIBE_TOPIC};
+    int qos[]                   = {0};
     err_t err;
     int i;
 
@@ -252,7 +264,7 @@ static void mqtt_message_published_cb(void *arg, err_t err)
 
     if (err == ERR_OK)
     {
-        PRINTF("Published to the topic \"%s\".\r\n", topic);
+        PRINTF("Published \r\n");//to the topic \"%s\".\r\n", topic);
     }
     else
     {
@@ -265,14 +277,26 @@ static void mqtt_message_published_cb(void *arg, err_t err)
  */
 static void publish_message(void *ctx)
 {
-    static const char *topic   = "lwip_topic/100";
-    static const char *message = "message from board";
-
-    LWIP_UNUSED_ARG(ctx);
+    static const char *topic   = EXAMPLE_MQTT_PUBLISH_TOPIC;
+    const char *message        = (ctx != NULL) ? (const char *)ctx : EXAMPLE_MQTT_PUBLISH_MESSAGE;
 
     PRINTF("Going to publish to the topic \"%s\"...\r\n", topic);
+    // PRINTF("Publishing ...\n");
 
-    mqtt_publish(mqtt_client, topic, message, strlen(message), 1, 0, mqtt_message_published_cb, (void *)topic);
+    if (connected)
+    {
+        mqtt_publish(mqtt_client, topic, message, strlen(message), 1, 0, mqtt_message_published_cb, (void *)topic);
+    }
+}
+
+void mqtt_freertos_publish(const char *message)
+{
+    err_t err = tcpip_callback(publish_message, (void *)message);
+
+    if (err != ERR_OK)
+    {
+        PRINTF("Failed to invoke publishing of a message on the tcpip_thread: %d.\r\n", err);
+    }
 }
 
 /*!
@@ -319,6 +343,7 @@ static void app_thread(void *arg)
         PRINTF("Failed to obtain IP address: %d.\r\n", err);
     }
 
+#ifndef EXAMPLE_MQTT_PUBLISH_ON_SWITCH
     /* Publish some messages */
     for (i = 0; i < 5;)
     {
@@ -334,6 +359,13 @@ static void app_thread(void *arg)
 
         sys_msleep(1000U);
     }
+#else
+    LWIP_UNUSED_ARG(i);
+    while (1)
+    {
+        sys_msleep(1000U);
+    }
+#endif
 
     /* Disconnect from MQTT broker from tcpip_thread */
     err = tcpip_callback(disconnect_from_mqtt, NULL);

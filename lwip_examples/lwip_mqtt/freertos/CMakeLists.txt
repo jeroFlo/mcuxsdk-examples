@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.22.0)
 
 include(${SdkRootDirPath}/cmake/extension/mcux.cmake)
 
-project(lwip_mqtt_freertos LANGUAGES C CXX ASM PROJECT_BOARD_PORT_PATH ${board_root}/${board}/lwip_examples/lwip_mqtt/freertos)
+project(frdmrw612_lwip_mqtt_freertos LANGUAGES C CXX ASM PROJECT_BOARD_PORT_PATH ${board_root}/${board}/lwip_examples/lwip_mqtt/freertos)
 
 include(${SdkRootDirPath}/CMakeLists.txt)
 include(${SdkRootDirPath}/examples/lwip_examples/mqtt_common/CMakeLists.txt)
@@ -18,7 +18,8 @@ mcux_add_source(
 
 mcux_add_macro(
     CC "-DUSE_RTOS=1\
-       -DPRINTF_ADVANCED_ENABLE=1"
+    -DPRINTF_ADVANCED_ENABLE=1\
+         -DEXAMPLE_MQTT_PUBLISH_ON_SWITCH=1"
 )
 
 mcux_add_macro(
