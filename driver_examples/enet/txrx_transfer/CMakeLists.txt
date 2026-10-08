@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.22.0)
 
 include(${SdkRootDirPath}/cmake/extension/mcux.cmake)
 
-project(enet_txrx_transfer LANGUAGES C CXX ASM PROJECT_BOARD_PORT_PATH ${board_root}/${board}/driver_examples/enet/txrx_transfer)
+project(frdmrw612_enet_txrx_transfer LANGUAGES C CXX ASM PROJECT_BOARD_PORT_PATH ${board_root}/${board}/driver_examples/enet/txrx_transfer)
 
 include(${SdkRootDirPath}/CMakeLists.txt)
 mcux_add_source(
@@ -18,6 +18,10 @@ mcux_add_include(
 
 mcux_add_macro(
     CC "-DPRINTF_ADVANCED_ENABLE=1"
+)
+
+mcux_add_linker_symbol(
+    SYMBOLS "__stack_size__=0x4000"
 )
 
 include(${SdkRootDirPath}/${board_root}/${board}/driver_examples/enet/txrx_transfer/reconfig.cmake OPTIONAL)
