@@ -180,7 +180,7 @@ int main(void)
     GPIO_PortInit(BOARD_SW2_GPIO, BOARD_SW2_GPIO_PORT);
     GPIO_PinInit(BOARD_SW2_GPIO, BOARD_SW2_GPIO_PORT, BOARD_SW2_GPIO_PIN, &switchConfig);
     GPIO_PinInit(GPIO, 0U, 1U, &(gpio_pin_config_t){kGPIO_DigitalOutput, 0U});
-
+    GPIO_PinWrite(GPIO, 0U, 1U, 1U);
     if (sys_thread_new("switch", switch_thread, NULL, SWITCH_THREAD_STACKSIZE, SWITCH_THREAD_PRIO) == NULL)
     {
         LWIP_ASSERT("main(): Switch task creation failed.", 0);
