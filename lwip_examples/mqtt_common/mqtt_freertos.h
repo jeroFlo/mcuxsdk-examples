@@ -29,6 +29,9 @@
 
 #endif
 
+#define LED_A_MQTT_PUBLISH_TOPIC "equipo2/tarjeta_a/led"
+
+
 #ifndef EXAMPLE_MQTT_PUBLISH_TOPIC
 #ifdef EXAMPLE_MQTT_PUBLISH_ON_SWITCH
 // #define EXAMPLE_MQTT_PUBLISH_TOPIC "/user/jeniferR1239/lucesclase/luz34/data" // here goes Bricio's LED topic
@@ -54,6 +57,8 @@
 void mqtt_freertos_run_thread(struct netif *netif);
 
 void mqtt_freertos_publish(const char *message);
+
+void mqtt_freertos_publish_topic(const char *topic, const char *message);
 
 void mqtt_freertos_message_received(const char *topic, const char *message);
 

@@ -58,19 +58,31 @@
 static phy_handle_t phyHandle;
 static bool lightState;
 
+
 void mqtt_freertos_message_received(const char *topic, const char *message)
 {
     if (strcmp(topic, EXAMPLE_MQTT_SUBSCRIBE_TOPIC) == 0)
     {
         if (strcmp(message, "1") == 0)
         {
+            
             GPIO_PinWrite(GPIO, 0U, 1U, 0U);
-            PRINTF("LED: ON\r\n");
+            vTaskDelay(pdMS_TO_TICKS(1000U));
+            if ((GPIO_PinRead(GPIO, 0U, 1U) == 0U)){
+                PRINTF("LED: ON\r\n");
+                mqtt_freertos_publish_topic(LED_A_MQTT_PUBLISH_TOPIC, "1");
+            }
+            
         }
         else if (strcmp(message, "0") == 0)
         {
+            
             GPIO_PinWrite(GPIO, 0U, 1U, 1U);
-            PRINTF("LED: OFF\r\n");
+            vTaskDelay(pdMS_TO_TICKS(1000U));
+            if ((GPIO_PinRead(GPIO, 0U, 1U) == 1U)){
+                PRINTF("LED: OFF\r\n");
+                mqtt_freertos_publish_topic(LED_A_MQTT_PUBLISH_TOPIC, "0");
+            }
         }
     }
 }

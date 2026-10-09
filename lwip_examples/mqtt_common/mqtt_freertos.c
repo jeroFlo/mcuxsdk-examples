@@ -79,6 +79,14 @@ static ip_addr_t mqtt_addr;
 static volatile bool connected = false;
 static char incoming_topic[128];
 static char incoming_message[16];
+static char requested_publish_topic[128];
+static char requested_publish_message[16];
+
+typedef struct
+{
+    const char *topic;
+    const char *message;
+} mqtt_publish_request_t;
 
 __attribute__((weak)) void mqtt_freertos_message_received(const char *topic, const char *message)
 {
@@ -299,6 +307,37 @@ void mqtt_freertos_publish(const char *message)
     }
 }
 
+static void publish_requested_topic(void *ctx)
+{
+    mqtt_publish_request_t *request = (mqtt_publish_request_t *)ctx;
+
+    if (connected)
+    {
+        mqtt_publish(mqtt_client, request->topic, request->message, strlen(request->message), 1, 0,
+                     mqtt_message_published_cb, (void *)request->topic);
+    }
+}
+
+void mqtt_freertos_publish_topic(const char *topic, const char *message)
+{
+    static mqtt_publish_request_t request;
+    err_t err;
+
+    strncpy(requested_publish_topic, topic, sizeof(requested_publish_topic) - 1U);
+    requested_publish_topic[sizeof(requested_publish_topic) - 1U] = '\0';
+    strncpy(requested_publish_message, message, sizeof(requested_publish_message) - 1U);
+    requested_publish_message[sizeof(requested_publish_message) - 1U] = '\0';
+
+    request.topic = requested_publish_topic;
+    request.message = requested_publish_message;
+    err = tcpip_callback(publish_requested_topic, &request);
+
+    if (err != ERR_OK)
+    {
+        PRINTF("Failed to invoke topic publishing on the tcpip_thread: %d.\r\n", err);
+    }
+}
+
 /*!
  * @brief Application thread.
  */
@@ -399,9 +438,9 @@ static void generate_client_id(void)
     assert(sizeof(client_id) >= (5U + (2U * id_len)));
 
     /* Fill in prefix */
-    client_id[idx++] = 'n';
-    client_id[idx++] = 'x';
-    client_id[idx++] = 'p';
+    client_id[idx++] = 'j';
+    client_id[idx++] = 'r';
+    client_id[idx++] = 'f';
     client_id[idx++] = '_';
 
     /* Append unique ID */
