@@ -37,7 +37,8 @@ mcux_add_include(
 # Add additional configuration
 mcux_add_macro(
     CC "-DUSE_RTOS=1\
-       -DPRINTF_ADVANCED_ENABLE=1"
+    -DPRINTF_ADVANCED_ENABLE=1\
+    -DLWIP_NETIF_API=1"
 )
 mcux_add_iar_configuration(
 	CC "--dlib_config full\

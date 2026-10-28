@@ -30,7 +30,7 @@
 #endif
 
 #define LED_A_MQTT_PUBLISH_TOPIC "equipo2/tarjeta_a/led"
-
+#define EXAMPLE_MQTT_PUBLISH_ON_SWITCH 1
 
 #ifndef EXAMPLE_MQTT_PUBLISH_TOPIC
 #ifdef EXAMPLE_MQTT_PUBLISH_ON_SWITCH

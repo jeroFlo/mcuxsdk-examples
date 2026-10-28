@@ -41,6 +41,7 @@
 #define MAX_LISTENING_SOCKETS_TCP 4
 #define MAX_SOCKETS_UDP           6
 #define TCP_SND_BUF_COUNT         2
+#define TCPIP_STACK_TX_HEAP_SIZE  0
 
 /* ---------- Core locking ---------- */
 
@@ -249,7 +250,7 @@ void sys_mark_tcpip_thread(void);
  * MEMP_NUM_SYS_TIMEOUT: the number of simulateously active timeouts.
  * (requires NO_SYS==0)
  */
-#define MEMP_NUM_SYS_TIMEOUT 12
+#define MEMP_NUM_SYS_TIMEOUT 24
 
 /**
  * MEMP_NUM_NETBUF: the number of struct netbufs.
@@ -426,17 +427,10 @@ void sys_mark_tcpip_thread(void);
  * DNS related options, revisit later to fine tune.
  */
 #define LWIP_DNS            1
-#define LWIP_MDNS_RESPONDER 1
-#define LWIP_MDNS_SEARCH    0
-#define LWIP_NUM_NETIF_CLIENT_DATA 2
 #define DNS_TABLE_SIZE      2  // number of table entries, default 4
 #define DNS_MAX_NAME_LENGTH 64 // max. name length, default 256
 #define DNS_MAX_SERVERS     2  // number of DNS servers, default 2
 #define DNS_DOES_NAME_CHECK 1  // compare received name with given,def 0
-#define DNS_MSG_SIZE        512
-#define MDNS_MSG_SIZE       512
-
-#define MDNS_TABLE_SIZE  1 // number of mDNS table entries
 #define MDNS_MAX_SERVERS 1 // number of mDNS multicast addresses
 /* TODO: Number of active UDP PCBs is equal to number of active UDP sockets plus
  * two. Need to find the users of these 2 PCBs
