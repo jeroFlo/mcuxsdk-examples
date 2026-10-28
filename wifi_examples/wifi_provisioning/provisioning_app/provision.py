@@ -9,7 +9,7 @@ import struct
 import sys
 
 TCP_PORT = 15000
-TCP_TIMEOUT_SECONDS = 8
+TCP_TIMEOUT_SECONDS = 30
 MDNS_ADDRESS = "224.0.0.251"
 MDNS_PORT = 5353
 MDNS_SERVICE_ENUMERATION = "_services._dns-sd._udp.local"
@@ -23,9 +23,21 @@ def send_credentials(device_ip: str, port: int, ssid: str, password: str) -> str
         raise ValueError("SSID and password cannot contain newline characters")
 
     payload = f"{ssid}\n{password}\n".encode("utf-8")
-    with socket.create_connection((device_ip, port), TCP_TIMEOUT_SECONDS) as connection:
-        connection.sendall(payload)
-        return connection.recv(128).decode("utf-8", errors="replace").strip()
+    print(f"Connecting to {device_ip}:{port}...")
+    try:
+        connection = socket.create_connection((device_ip, port), TCP_TIMEOUT_SECONDS)
+    except socket.timeout as error:
+        raise TimeoutError(f"TCP connection timed out to {device_ip}:{port}") from error
+
+    with connection:
+        print(f"Connected; sending {len(payload)} bytes...")
+        try:
+            connection.sendall(payload)
+            connection.shutdown(socket.SHUT_WR)
+            print("Payload sent; waiting for board response...")
+            return connection.recv(128).decode("utf-8", errors="replace").strip()
+        except socket.timeout as error:
+            raise TimeoutError(f"Board did not respond on TCP {device_ip}:{port}") from error
 
 
 def encode_dns_name(name: str) -> bytes:
