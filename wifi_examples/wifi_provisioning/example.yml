@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=../../../../../scripts/data_schema/example_description_schema.json
+wifi_provisioning:
+  section-type: application
+  contents:
+    meta_path: examples/wifi_examples/wifi_provisioning
+    project-root-path: boards/${board}/wifi_examples/wifi_provisioning/${multicore_foldername}
+    document:
+      name: wifi_provisioning${core_id_suffix_name}
+      category: wifi_examples
+      brief: The wifi_provisioning demo application configures Wi-Fi credentials and
+        connects the board to a wireless network.
+      example_readme:
+      - examples/wifi_examples/wifi_provisioning/readme.md
+      - ${board_root}/${board}/wifi_examples/common/wifi_examples_readme.md
+      - ${board_root}/${board}/wifi_examples/readme_modules.md
+      - ${board_root}/${board}/examples_shared_readme.md
+  boards:
+    evkmimxrt1064:
+    - -armgcc@debug
+    - -armgcc@release
+    - -armgcc@sdram_debug
+    - -armgcc@sdram_release
+    - -iar@debug
+    - -iar@release
+    - -iar@sdram_debug
+    - -iar@sdram_release
+    - -mdk@debug
+    - -mdk@release
+    - -mdk@sdram_debug
+    - -mdk@sdram_release
+    frdmrw612:
+    - -armgcc@debug
+    - -armgcc@release
+    - -iar@debug
+    - -iar@release
+    - -mdk@debug
+    - -mdk@release
+    rdrw612bga:
+    - -armgcc@debug
+    - -armgcc@release
+    - -iar@debug
+    - -iar@release
+    - -mdk@debug
+    - -mdk@release
