@@ -95,7 +95,8 @@ def send_mdns_query(query_name: str, query_type: int) -> list[tuple[str, int, st
                 elif record_type in (12, 33):
                     value, _ = read_dns_name(packet, record_offset + (6 if record_type == 33 else 0))
                     if record_type == 33:
-                        value = f"{struct.unpack('!HH', record_data[:4])[0]} {value}"
+                        port = struct.unpack("!H", record_data[4:6])[0]
+                        value = f"{port} {value}"
                 else:
                     value = ""
                 records.append((record_name, record_type, value))

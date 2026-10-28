@@ -38,7 +38,7 @@
 #define WIFI_NETWORK_LABEL "Home_1"
 #define PROVISIONING_TCP_PORT 15000U
 #define PROVISIONING_AP_SSID "SmartBulb1"
-#define PROVISIONING_AP_PASSWORD ""
+#define PROVISIONING_AP_PASSWORD "123carro$$$"
 #define PROVISIONING_AP_CHANNEL 6U
 #define PROVISIONING_MDNS_HOSTNAME "SmartBulb1_mdns"
 #define PROVISIONING_MDNS_SERVICE "_smartbulb"
@@ -80,6 +80,7 @@ static void provisioning_mdns_name_result(struct netif *netif, u8_t result, s8_t
 static bool start_provisioning_mdns(void)
 {
     struct netif *provisioning_netif = NULL;
+    err_t error;
 
     for (uint32_t attempt = 0U; attempt < 50U; attempt++)
     {
@@ -102,11 +103,25 @@ static bool start_provisioning_mdns(void)
     LOCK_TCPIP_CORE();
     mdns_resp_register_name_result_cb(provisioning_mdns_name_result);
     mdns_resp_init();
-    mdns_resp_add_netif(provisioning_netif, PROVISIONING_MDNS_HOSTNAME);
-    mdns_resp_add_service(provisioning_netif, "SmartBulb1", PROVISIONING_MDNS_SERVICE, DNSSD_PROTO_TCP,
-                          PROVISIONING_TCP_PORT, NULL, NULL);
-    mdns_resp_announce(provisioning_netif);
+    error = mdns_resp_add_netif(provisioning_netif, PROVISIONING_MDNS_HOSTNAME);
+    if (error == ERR_OK)
+    {
+        error = mdns_resp_add_service(provisioning_netif, "SmartBulb1", PROVISIONING_MDNS_SERVICE, DNSSD_PROTO_TCP,
+                                      PROVISIONING_TCP_PORT, NULL, NULL);
+    }
+    if (error == ERR_OK)
+    {
+        mdns_resp_announce(provisioning_netif);
+    }
     UNLOCK_TCPIP_CORE();
+
+    if (error != ERR_OK)
+    {
+        PRINTF("[!] mDNS registration failed: %d\r\n", error);
+        return false;
+    }
+
+    PRINTF("[i] mDNS interface IP: %s\r\n", ip4addr_ntoa(netif_ip4_addr(provisioning_netif)));
     PRINTF("[i] mDNS: %s.local (%s._tcp, port %u)\r\n", PROVISIONING_MDNS_HOSTNAME, PROVISIONING_MDNS_SERVICE,
            PROVISIONING_TCP_PORT);
     return true;
