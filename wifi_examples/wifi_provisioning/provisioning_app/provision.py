@@ -60,6 +60,10 @@ def send_mdns_query(query_name: str, query_type: int) -> list[tuple[str, int, st
 
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as connection:
         connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        connection.setsockopt(socket.SOL_IP, socket.IP_MULTICAST_TTL, 255)
+        connection.bind(("", MDNS_PORT))
+        membership = struct.pack("4s4s", socket.inet_aton(MDNS_ADDRESS), socket.inet_aton("0.0.0.0"))
+        connection.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership)
         connection.settimeout(2)
         connection.sendto(query, (MDNS_ADDRESS, MDNS_PORT))
 
