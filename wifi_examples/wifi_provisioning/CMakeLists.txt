@@ -16,6 +16,8 @@ mcux_add_source(
     BASE_PATH ${SdkRootDirPath}
     SOURCES 
         examples/wifi_examples/wifi_provisioning/wifi_provisioning.c
+        examples/wifi_examples/wifi_provisioning/cred_flash_storage.c
+        examples/wifi_examples/wifi_provisioning/cred_flash_storage.h
         examples/wifi_examples/wifi_provisioning/wifi_config/wifi_config.h
         examples/wifi_examples/wifi_provisioning/lwipopts.h
         examples/wifi_examples/wifi_provisioning/lwippools.h

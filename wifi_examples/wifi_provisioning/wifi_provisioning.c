@@ -12,6 +12,7 @@
  ******************************************************************************/
 #include "lwip/tcpip.h"
 #include "lwip/api.h"
+#include "lwip/apps/mdns.h"
 #include "board.h"
 #include "app.h"
 #include "wpl.h"
@@ -21,6 +22,7 @@
 #include "fsl_gpio.h"
 #include "fsl_io_mux.h"
 #include "mqtt_freertos.h"
+#include "cred_flash_storage.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -35,10 +37,14 @@
  * Definitions
  ******************************************************************************/
 #define WIFI_NETWORK_LABEL "Home_1"
+#define CONNECTION_INFO_FILENAME "connection_info.dat"
+#define WIFI_SECURITY_WILDCARD_NAME "WILDCARD"
 #define PROVISIONING_TCP_PORT 15000U
 #define PROVISIONING_AP_SSID "SmartBulb1"
 #define PROVISIONING_AP_PASSWORD "123carro$$$"
 #define PROVISIONING_AP_CHANNEL 6U
+#define PROVISIONING_MDNS_HOSTNAME "SmartBulb1_mdns"
+#define PROVISIONING_MDNS_SERVICE "_smartbulb"
 #define PROVISIONING_BUFFER_SIZE 128U
 
 #define SWITCH_THREAD_STACKSIZE 512
@@ -52,23 +58,99 @@
 
 static bool lightState;
 
-static int32_t connect_to_network(const char *ssid, const char *password)
-{
-    int32_t result;
+static char saved_ssid[WPL_WIFI_SSID_LENGTH + 1U];
+static char saved_password[WPL_WIFI_PASSWORD_LENGTH + 1U];
+static char saved_security[64U];
 
-    result = WPL_AddNetwork(ssid, password, WIFI_NETWORK_LABEL);
+static struct netif *get_provisioning_netif(void)
+{
+    struct netif *netif;
+
+    for (netif = netif_list; netif != NULL; netif = netif->next)
+    {
+        if (netif_is_up(netif) && !ip4_addr_isany_val(*netif_ip4_addr(netif)))
+        {
+            return netif;
+        }
+    }
+
+    return NULL;
+}
+
+static void provisioning_mdns_name_result(struct netif *netif, u8_t result, s8_t service)
+{
+    LWIP_UNUSED_ARG(netif);
+    LWIP_UNUSED_ARG(service);
+    PRINTF("[i] mDNS announcement result: %u\r\n", result);
+}
+
+static void start_provisioning_mdns(void)
+{
+    struct netif *provisioning_netif = NULL;
+    err_t error = ERR_OK;
+
+    for (uint32_t attempt = 0U; attempt < 50U; attempt++)
+    {
+        LOCK_TCPIP_CORE();
+        provisioning_netif = get_provisioning_netif();
+        UNLOCK_TCPIP_CORE();
+        if (provisioning_netif != NULL)
+        {
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100U));
+    }
+
+    if (provisioning_netif == NULL)
+    {
+        PRINTF("[!] No active IPv4 interface for mDNS; TCP remains available\r\n");
+        return;
+    }
+
+    LOCK_TCPIP_CORE();
+    mdns_resp_register_name_result_cb(provisioning_mdns_name_result);
+    mdns_resp_init();
+    error = mdns_resp_add_netif(provisioning_netif, PROVISIONING_MDNS_HOSTNAME);
+    if (error == ERR_OK)
+    {
+        error = mdns_resp_add_service(provisioning_netif, "SmartBulb1_jenifer", PROVISIONING_MDNS_SERVICE, DNSSD_PROTO_TCP,
+                                      PROVISIONING_TCP_PORT, NULL, NULL);
+    }
+    if (error == ERR_OK)
+    {
+        mdns_resp_announce(provisioning_netif);
+    }
+    UNLOCK_TCPIP_CORE();
+
+    if (error == ERR_OK)
+    {
+        PRINTF("[i] mDNS: SmartBulb1.%s._tcp.local -> %s:%u\r\n", PROVISIONING_MDNS_SERVICE,
+               ip4addr_ntoa(netif_ip4_addr(provisioning_netif)), PROVISIONING_TCP_PORT);
+    }
+    else
+    {
+        PRINTF("[!] mDNS registration failed: %d; TCP remains available\r\n", error);
+    }
+}
+
+static int32_t connect_to_saved_network(const char *ssid, const char *password)
+{
+    int32_t result = WPL_AddNetwork(ssid, password, WIFI_NETWORK_LABEL);
+
+    // PRINTF("[i] Saved network profile result: %d\r\n", (int)result);
+
     if (result == WPLRET_SUCCESS)
     {
-        PRINTF("Connecting as client to ssid: %s\r\n", ssid);
+        PRINTF("[i] Connecting to saved network: %s\r\n", ssid);
         result = WPL_Join(WIFI_NETWORK_LABEL);
+        // PRINTF("[i] Saved network join result: %d\r\n", (int)result);
     }
 
     if (result == WPLRET_SUCCESS)
     {
         char ip[16];
         WPL_GetIP(ip, 1);
-        PRINTF("[i] Connected to Wi-Fi\r\nssid: %s\r\n", ssid);
-        PRINTF("IPv4 address: %s\r\n", ip);
+        // PRINTF("[i] Connected using saved credentials; IPv4 address: %s\r\n", ip);
     }
 
     return result;
@@ -160,6 +242,18 @@ static void provisioning_server_task(void *arg)
 
             if (parse_credentials(payload, ssid, password))
             {
+                if (save_wifi_credentials(CONNECTION_INFO_FILENAME, ssid, password, WIFI_SECURITY_WILDCARD_NAME) != 0U)
+                {
+                    PRINTF("[!] Failed to persist Wi-Fi credentials\r\n");
+                    netconn_write(connection, "ERROR: storage\n", 16U, NETCONN_COPY);
+                    netconn_close(connection);
+                    netconn_delete(connection);
+                    continue;
+                }
+
+                /* A join can switch the radio away from the provisioning AP.
+                 * Acknowledge and close TCP before rebooting into the saved config. */
+
                 error = netconn_write(connection, "OK\n", 3U, NETCONN_COPY);
                 if (error != ERR_OK)
                 {
@@ -177,14 +271,8 @@ static void provisioning_server_task(void *arg)
                 netconn_close(listener);
                 netconn_delete(listener);
 
-                if (WPL_Stop_AP() == WPLRET_SUCCESS && connect_to_network(ssid, password) == WPLRET_SUCCESS)
-                {
-                    mqtt_freertos_run_thread(netif_default);
-                }
-                else
-                {
-                    PRINTF("[!] Failed to connect using received credentials\r\n");
-                }
+                PRINTF("[i] Restarting to apply saved Wi-Fi credentials\r\n");
+                NVIC_SystemReset();
                 vTaskDelete(NULL);
                 return;
             }
@@ -215,9 +303,9 @@ void mqtt_freertos_message_received(const char *topic, const char *message)
     {
         if (strcmp(message, "1") == 0)
         {
-            GPIO_PinWrite(GPIO, 0U, 1U, 0U);
+            GPIO_PinWrite(GPIO, 0U, 12U, 0U);
             vTaskDelay(pdMS_TO_TICKS(1000U));
-            if (GPIO_PinRead(GPIO, 0U, 1U) == 0U)
+            if (GPIO_PinRead(GPIO, 0U, 12U) == 0U)
             {
                 PRINTF("LED: ON\r\n");
                 mqtt_freertos_publish_topic(LED_A_MQTT_PUBLISH_TOPIC, "1");
@@ -225,9 +313,9 @@ void mqtt_freertos_message_received(const char *topic, const char *message)
         }
         else if (strcmp(message, "0") == 0)
         {
-            GPIO_PinWrite(GPIO, 0U, 1U, 1U);
+            GPIO_PinWrite(GPIO, 0U, 12U, 1U);
             vTaskDelay(pdMS_TO_TICKS(1000U));
-            if (GPIO_PinRead(GPIO, 0U, 1U) == 1U)
+            if (GPIO_PinRead(GPIO, 0U, 12U) == 1U)
             {
                 PRINTF("LED: OFF\r\n");
                 mqtt_freertos_publish_topic(LED_A_MQTT_PUBLISH_TOPIC, "0");
@@ -292,10 +380,21 @@ static void LinkStatusChangeCallback(bool linkState)
 static void main_task(void *arg)
 {
     uint32_t result = 0;
+    uint32_t storage_result;
 
     PRINTF("\r\n************************************************\r\n");
     PRINTF(" Wi-Fi TCP provisioning\r\n");
     PRINTF("************************************************\r\n");
+
+    storage_result = init_flash_storage(CONNECTION_INFO_FILENAME);
+    if (storage_result != 0U)
+    {
+        PRINTF("[!] Flash credential storage initialization failed\r\n");
+    }
+    else
+    {
+        PRINTF("[i] Flash credential storage initialized: %s\r\n", CONNECTION_INFO_FILENAME);
+    }
 
     /* Initialize Wi-Fi board */
     PRINTF("[i] Initializing Wi-Fi connection... \r\n");
@@ -316,6 +415,31 @@ static void main_task(void *arg)
 
     PRINTF("[i] Successfully initialized Wi-Fi module\r\n");
 
+    if (storage_result == 0U)
+    {
+        uint32_t credentials_result =
+            get_saved_wifi_credentials(CONNECTION_INFO_FILENAME, saved_ssid, saved_password, saved_security);
+
+        if (credentials_result == 0U && saved_ssid[0] != '\0')
+        {
+            PRINTF("[i] Saved Wi-Fi credentials found for: %s\r\n", saved_ssid);
+            // PRINTF("[i] Saved Wi-Fi password: %s\r\n", saved_password);
+            if (connect_to_saved_network(saved_ssid, saved_password) == WPLRET_SUCCESS)
+            {
+                mqtt_freertos_run_thread(netif_default);
+                vTaskDelete(NULL);
+                return;
+            }
+
+            PRINTF("[!] Saved Wi-Fi connection failed; starting provisioning AP\r\n");
+            WPL_RemoveNetwork(WIFI_NETWORK_LABEL);
+        }
+        else
+        {
+            PRINTF("[i] No saved Wi-Fi credentials found; starting provisioning AP\r\n");
+        }
+    }
+
     // Start provisioning AP and wait for credentials
     result = WPL_Start_AP(PROVISIONING_AP_SSID, PROVISIONING_AP_PASSWORD, PROVISIONING_AP_CHANNEL);
     if (result != WPLRET_SUCCESS)
@@ -330,6 +454,8 @@ static void main_task(void *arg)
         WPL_GetIP(ip, 0);
         PRINTF("[i] Join AP %s and connect to %s:%u\r\n", PROVISIONING_AP_SSID, ip, PROVISIONING_TCP_PORT);
     }
+
+    start_provisioning_mdns();
 
     if (xTaskCreate(provisioning_server_task, "provision", 2048, NULL, configMAX_PRIORITIES - 3, NULL) != pdPASS)
     {
@@ -351,11 +477,11 @@ int main(void)
     BOARD_InitHardware();
 
     IO_MUX_SetPinMux(IO_MUX_GPIO11);
-    IO_MUX_SetPinMux(IO_MUX_GPIO1);
+    IO_MUX_SetPinMux(IO_MUX_GPIO12);
     GPIO_PortInit(BOARD_SW2_GPIO, BOARD_SW2_GPIO_PORT);
     GPIO_PinInit(BOARD_SW2_GPIO, BOARD_SW2_GPIO_PORT, BOARD_SW2_GPIO_PIN, &switchConfig);
-    GPIO_PinInit(GPIO, 0U, 1U, &(gpio_pin_config_t){kGPIO_DigitalOutput, 0U});
-    GPIO_PinWrite(GPIO, 0U, 1U, 1U);
+    GPIO_PinInit(GPIO, 0U, 12U, &(gpio_pin_config_t){kGPIO_DigitalOutput, 0U});
+    GPIO_PinWrite(GPIO, 0U, 12U, 1U);
 
     if (xTaskCreate(switch_task, "switch", SWITCH_THREAD_STACKSIZE, NULL, SWITCH_THREAD_PRIORITY, NULL) != pdPASS)
     {

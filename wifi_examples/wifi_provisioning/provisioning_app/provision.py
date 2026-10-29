@@ -155,12 +155,12 @@ def choose_device(devices: list[tuple[str, str, int, str]]) -> tuple[str, str, i
 def main() -> int:
     parser = argparse.ArgumentParser(description="Provision an RW612 Wi-Fi connection")
     parser.add_argument("--device-ip", help="Use a fixed IP instead of mDNS discovery")
-    parser.add_argument("--target-ssid", default=DEFAULT_SSID, help="SSID to configure on the SmartBulb")
-    parser.add_argument("--target-password",default=DEFAULT_PASSWORD, help="Password to configure on the SmartBulb")
+    parser.add_argument("--ssid", help="SSID to configure on the SmartBulb")
+    parser.add_argument("--password",help="Password to configure on the SmartBulb")
     args = parser.parse_args()
 
-    target_ssid = args.target_ssid or input("SSID de la red destino: ")
-    target_password = args.target_password or getpass.getpass("Contraseña de la red destino: ")
+    target_ssid = args.ssid or input("SSID de la red destino: ")
+    target_password = args.password or getpass.getpass("Contraseña de la red destino: ")
 
     try:
         if args.device_ip:
